@@ -1,0 +1,33 @@
+#!/bin/sh
+
+echo "running pre-commit hook"
+# find all .omap files that are staged
+files=$(git diff --name-only --cached |  grep '.omap')
+for file in $files; do
+    # check if there are any changes in the file that are not staged
+    modified=$(git status -s $file)
+    stashed=false
+    if [[ $modified = MM* ]]; then
+        stashed=true
+        # if so, create a patch with the changes that aren't staged
+        git diff $file > mypatch.patch
+        # and discard said changes
+        git restore $file
+    fi
+    # remove absolute paths from the file
+    scripts/paths_util.py -m -u $file
+    scriptRes=$?
+    # if script failes, abort commit
+    if [ $scriptRes -ne 0 ]; then
+        exit $scriptRes
+    fi
+    # stage changes produced by the script
+    git stage $file
+    if $stashed; then
+        # if there were any working changes, restore them
+        git apply mypatch.patch
+        # and delete the patch
+        rm mypatch.patch
+    fi
+done
+exit 0
